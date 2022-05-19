@@ -1,6 +1,5 @@
 package com.example.app
 
-import android.content.Context
 import android.content.Context.SENSOR_SERVICE
 import android.graphics.ImageFormat
 import android.graphics.Rect
@@ -17,7 +16,6 @@ import android.util.Log
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
-import androidx.core.content.ContextCompat.getSystemService
 import androidx.fragment.app.Fragment
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
 import com.google.ar.core.Frame
@@ -34,7 +32,8 @@ class MainFragment : Fragment(R.layout.fragment_main), SensorEventListener {
     lateinit var sceneView: ArSceneView
     lateinit var actionButton: ExtendedFloatingActionButton
 
-    var capturePicture: Boolean = false
+    var triggerTakePicture: Boolean = false
+    var canTakePicture: Boolean = false
 
     lateinit var sensorManager: SensorManager
     lateinit var accelerationSensor: Sensor
@@ -80,7 +79,7 @@ class MainFragment : Fragment(R.layout.fragment_main), SensorEventListener {
     }
 
 
-    fun checkAcceleractions(accelerations: FloatArray): Boolean {
+    fun isPhoneNotMoving(accelerations: FloatArray): Boolean {
         for (i in 0..2) {
             // m/s²
             if (abs(accelerations[i]) > 0.01) { // test
@@ -90,7 +89,7 @@ class MainFragment : Fragment(R.layout.fragment_main), SensorEventListener {
         return true
     }
 
-    fun checkOrientations(orientations: FloatArray): Boolean {
+    fun isPhoneOrientedDown(orientations: FloatArray): Boolean {
         // Conversion from radian to degrees
         for (i in 0..2) {
             orientations[i] = Math.toDegrees(orientations[i].toDouble()).toFloat()
@@ -100,6 +99,24 @@ class MainFragment : Fragment(R.layout.fragment_main), SensorEventListener {
             return false
         }
         return true
+    }
+
+    /*
+    * Ask about whether to use cameraX or not.
+    * Ask about resolution of Filament
+    * */
+    fun computeDepthOfField()
+    {
+        var focalLength: Float = 0f //distance between the lens and the focal point
+        var hyperfocalDistance: Float = 0f // first distance at which the infinity is sharp
+        var aperture: Float = 0f // f/number, the opening that lets the light enter the camera
+        var minimumFocusDistance: Float = 0f // first distance at which the subject is sharp
+        var circleOfConfusion: Float = 0f // size of the circle where light rays converge, but are not focused perfectly on a point
+
+        hyperfocalDistance = (focalLength * focalLength) / (aperture * circleOfConfusion)
+        var firstSharpDistance = (hyperfocalDistance * minimumFocusDistance) / (hyperfocalDistance + (minimumFocusDistance - focalLength))
+        var lastSharpDistance = (hyperfocalDistance * minimumFocusDistance) / (hyperfocalDistance - (minimumFocusDistance - focalLength))
+        var depthOfField = lastSharpDistance - firstSharpDistance
     }
 
     /* Implementing SensorEventListener functions */
@@ -121,6 +138,8 @@ class MainFragment : Fragment(R.layout.fragment_main), SensorEventListener {
             //event values are in rad/s
             System.arraycopy(event.values, 0, gyroscopeReading, 0, gyroscopeReading.size)
         }
+
+        canTakePicture = isPhoneNotMoving(accelerometerReading) && isPhoneOrientedDown(gyroscopeReading)
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
@@ -165,11 +184,11 @@ class MainFragment : Fragment(R.layout.fragment_main), SensorEventListener {
     }
 
     fun setCapturePictureToTrue() {
-        this.capturePicture = true;
+        this.triggerTakePicture = true;
     }
 
     fun takePhoto() {
-        if (capturePicture == true) {
+        if (triggerTakePicture == true) {
             try {
                 val root: File? = activity?.getExternalFilesDir(Environment.DIRECTORY_PICTURES)
                 val filepath: String = root.toString() + File.separator + "test2.jpeg"
@@ -186,7 +205,7 @@ class MainFragment : Fragment(R.layout.fragment_main), SensorEventListener {
             } catch (t: Exception) {
                 Log.e("TAKE PHOTO", "Exception on the OpenGL thread", t);
             }
-            capturePicture = false
+            triggerTakePicture = false
         }
     }
 }
