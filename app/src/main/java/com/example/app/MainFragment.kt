@@ -5,6 +5,8 @@ import android.graphics.ImageFormat
 import android.graphics.Rect
 import android.graphics.YuvImage
 import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.media.Image
 import android.os.Bundle
@@ -13,7 +15,6 @@ import android.util.Log
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
-import androidx.core.content.ContextCompat.getSystemService
 import androidx.fragment.app.Fragment
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
 import com.google.ar.core.Frame
@@ -25,7 +26,7 @@ import java.io.File
 import java.io.FileOutputStream
 
 
-class MainFragment : Fragment(R.layout.fragment_main) {
+class MainFragment : Fragment(R.layout.fragment_main), SensorEventListener {
 
     lateinit var sceneView: ArSceneView
     lateinit var actionButton: ExtendedFloatingActionButton
@@ -117,9 +118,17 @@ class MainFragment : Fragment(R.layout.fragment_main) {
         super.onViewCreated(view, savedInstanceState)
 
         // Initializing sensors
+        // must turn sensors off manually!
         sensorManager = requireActivity().getSystemService(Context.SENSOR_SERVICE) as SensorManager
-        accelerationSensor = sensorManager.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION)
-        gyroscopeSensor = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
+
+        // Linear acceleration excludes gravity, as contrary to TYPE_ACCELEROMETER
+        accelerationSensor = sensorManager.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION).also { accelerationSensor ->
+            sensorManager.registerListener(this, accelerationSensor, SensorManager.SENSOR_DELAY_NORMAL, SensorManager.SENSOR_DELAY_UI)
+        } //must be calibrated!
+        gyroscopeSensor = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE).also { accelerationSensor ->
+            sensorManager.registerListener(this, gyroscopeSensor, SensorManager.SENSOR_DELAY_NORMAL, SensorManager.SENSOR_DELAY_UI)
+        }
+
 
         // Initializing camera
         sceneView = view.findViewById(R.id.sceneView)
@@ -137,5 +146,24 @@ class MainFragment : Fragment(R.layout.fragment_main) {
             }
             setOnClickListener { setCapturePictureToTrue() }
         }
+    }
+
+    private val accelerometerReading = FloatArray(3)
+
+    override fun onSensorChanged(event: SensorEvent?)
+    {
+        if (event == null) {
+            //Do nothing
+        }
+        else if (event.sensor.type == Sensor.TYPE_LINEAR_ACCELERATION) {
+            System.arraycopy(event.values, 0, accelerometerReading, 0, accelerometerReading.size)
+        }
+        else if (event.sensor.type == Sensor.TYPE_GYROSCOPE) {
+            System.arraycopy(event.values, 0, accelerometerReading, 0, accelerometerReading.size)
+        }
+    }
+
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
+
     }
 }
