@@ -1,10 +1,12 @@
 package com.example.app
 
 import android.content.Context
+import android.content.Context.SENSOR_SERVICE
 import android.graphics.ImageFormat
 import android.graphics.Rect
 import android.graphics.YuvImage
 import android.hardware.Sensor
+import android.hardware.Sensor.TYPE_GYROSCOPE
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
@@ -15,6 +17,7 @@ import android.util.Log
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
+import androidx.core.content.ContextCompat.getSystemService
 import androidx.fragment.app.Fragment
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
 import com.google.ar.core.Frame
@@ -24,19 +27,107 @@ import java.io.BufferedOutputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
+import kotlin.math.abs
 
 
 class MainFragment : Fragment(R.layout.fragment_main), SensorEventListener {
-
     lateinit var sceneView: ArSceneView
     lateinit var actionButton: ExtendedFloatingActionButton
+
+    var capturePicture: Boolean = false
 
     lateinit var sensorManager: SensorManager
     lateinit var accelerationSensor: Sensor
     lateinit var gyroscopeSensor: Sensor
 
-    var capturePicture : Boolean = false
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        InitSensorActivity()
 
+        // Initializing camera
+        sceneView = view.findViewById(R.id.sceneView)
+        sceneView.onArFrame = {
+            takePhoto();
+        }
+        sceneView.arCameraStream.cameraTexture
+
+        // Initializing interface
+        actionButton = view.findViewById<ExtendedFloatingActionButton>(R.id.actionButton).apply {
+            val bottomMargin = (layoutParams as ViewGroup.MarginLayoutParams).bottomMargin
+            doOnApplyWindowInsets { systemBarsInsets ->
+                (layoutParams as ViewGroup.MarginLayoutParams).bottomMargin =
+                    systemBarsInsets.bottom + bottomMargin
+            }
+            setOnClickListener { setCapturePictureToTrue() }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        sensorManager.registerListener(this, accelerationSensor, SensorManager.SENSOR_DELAY_NORMAL)
+        sensorManager.registerListener(this, gyroscopeSensor, SensorManager.SENSOR_DELAY_NORMAL)
+    }
+
+    override fun onPause() {
+        super.onPause()
+        sensorManager.unregisterListener(this)
+    }
+
+    fun InitSensorActivity() {
+        sensorManager = requireActivity().getSystemService(SENSOR_SERVICE) as SensorManager
+        accelerationSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+        gyroscopeSensor = sensorManager.getDefaultSensor(TYPE_GYROSCOPE)
+    }
+
+
+    fun checkAcceleractions(accelerations: FloatArray): Boolean {
+        for (i in 0..2) {
+            // m/s²
+            if (abs(accelerations[i]) > 0.01) { // test
+                return false
+            }
+        }
+        return true
+    }
+
+    fun checkOrientations(orientations: FloatArray): Boolean {
+        // Conversion from radian to degrees
+        for (i in 0..2) {
+            orientations[i] = Math.toDegrees(orientations[i].toDouble()).toFloat()
+        }
+
+        if (abs(orientations[0]) > 10 || abs(orientations[1]) > 10) {
+            return false
+        }
+        return true
+    }
+
+    /* Implementing SensorEventListener functions */
+    var accelerometerReading = FloatArray(3)
+    var gyroscopeReading = FloatArray(3)
+
+    override fun onSensorChanged(event: SensorEvent?) {
+        var sensorName = event!!.sensor.name
+        if (event == null) {
+            //Do nothing
+        } else if (event.sensor.type == Sensor.TYPE_LINEAR_ACCELERATION) {
+            //event values are in m/s²
+            System.arraycopy(event.values, 0, accelerometerReading, 0, accelerometerReading.size)
+            Log.d(
+                sensorName,
+                ": X: " + event.values[0] + "; Y: " + event.values[1] + "; Z: " + event.values[2]
+            )
+        } else if (event.sensor.type == Sensor.TYPE_GYROSCOPE) {
+            //event values are in rad/s
+            System.arraycopy(event.values, 0, gyroscopeReading, 0, gyroscopeReading.size)
+        }
+    }
+
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
+        //Check if the readings are accurate enough
+    }
+
+    /* Photo functions */
     private fun NV21toJPEG(nv21: ByteArray, width: Int, height: Int): ByteArray? {
         val out = ByteArrayOutputStream()
         val yuv = YuvImage(nv21, ImageFormat.NV21, width, height, null)
@@ -73,13 +164,11 @@ class MainFragment : Fragment(R.layout.fragment_main), SensorEventListener {
         bos.close()
     }
 
-    fun setCapturePictureToTrue()
-    {
+    fun setCapturePictureToTrue() {
         this.capturePicture = true;
     }
 
-    fun takePhoto()
-    {
+    fun takePhoto() {
         if (capturePicture == true) {
             try {
                 val root: File? = activity?.getExternalFilesDir(Environment.DIRECTORY_PICTURES)
@@ -87,83 +176,17 @@ class MainFragment : Fragment(R.layout.fragment_main), SensorEventListener {
                 Log.e("TAKE PHOTO", filepath)
 
                 val frame: Frame = sceneView.arSession!!.update()
-                var image: Image = frame.acquireCameraImage() //limited to 640x480, but has much higher performances than GLES
+                var image: Image =
+                    frame.acquireCameraImage() //limited to 640x480, but has much higher performances than GLES
                 WriteImageInformation(image, filepath)
                 image.close()
 
-                var toast : Toast = Toast.makeText(context, "photo taken", Toast.LENGTH_SHORT)
+                var toast: Toast = Toast.makeText(context, "photo taken", Toast.LENGTH_SHORT)
                 toast.show()
             } catch (t: Exception) {
                 Log.e("TAKE PHOTO", "Exception on the OpenGL thread", t);
             }
             capturePicture = false
         }
-    }
-
-    fun checkOrientation() : Boolean
-    {
-        val orientations = FloatArray(3)
-        // Conversion from radians to degrees
-        for (i in 0..2) {
-            orientations[i] = Math.toDegrees(orientations[i].toDouble()).toFloat()
-        }
-        if (orientations[0] > 10 || orientations[0] < -10 || orientations[1] > 10 || orientations[1] < -10)
-        {
-            return false
-        }
-        return true
-    }
-
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        super.onViewCreated(view, savedInstanceState)
-
-        // Initializing sensors
-        // must turn sensors off manually!
-        sensorManager = requireActivity().getSystemService(Context.SENSOR_SERVICE) as SensorManager
-
-        // Linear acceleration excludes gravity, as contrary to TYPE_ACCELEROMETER
-        accelerationSensor = sensorManager.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION).also { accelerationSensor ->
-            sensorManager.registerListener(this, accelerationSensor, SensorManager.SENSOR_DELAY_NORMAL, SensorManager.SENSOR_DELAY_UI)
-        } //must be calibrated!
-        gyroscopeSensor = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE).also { accelerationSensor ->
-            sensorManager.registerListener(this, gyroscopeSensor, SensorManager.SENSOR_DELAY_NORMAL, SensorManager.SENSOR_DELAY_UI)
-        }
-
-
-        // Initializing camera
-        sceneView = view.findViewById(R.id.sceneView)
-        sceneView.onArFrame = {
-            takePhoto();
-        }
-        sceneView.arCameraStream.cameraTexture
-
-        // Initializing interface
-        actionButton = view.findViewById<ExtendedFloatingActionButton>(R.id.actionButton).apply {
-            val bottomMargin = (layoutParams as ViewGroup.MarginLayoutParams).bottomMargin
-            doOnApplyWindowInsets { systemBarsInsets ->
-                (layoutParams as ViewGroup.MarginLayoutParams).bottomMargin =
-                    systemBarsInsets.bottom + bottomMargin
-            }
-            setOnClickListener { setCapturePictureToTrue() }
-        }
-    }
-
-    private val accelerometerReading = FloatArray(3)
-
-    override fun onSensorChanged(event: SensorEvent?)
-    {
-        if (event == null) {
-            //Do nothing
-        }
-        else if (event.sensor.type == Sensor.TYPE_LINEAR_ACCELERATION) {
-            System.arraycopy(event.values, 0, accelerometerReading, 0, accelerometerReading.size)
-        }
-        else if (event.sensor.type == Sensor.TYPE_GYROSCOPE) {
-            System.arraycopy(event.values, 0, accelerometerReading, 0, accelerometerReading.size)
-        }
-    }
-
-    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
-
     }
 }
