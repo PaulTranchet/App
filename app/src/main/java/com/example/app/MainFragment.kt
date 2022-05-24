@@ -20,7 +20,9 @@ import androidx.fragment.app.Fragment
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
 import com.google.ar.core.Camera
 import com.google.ar.core.Frame
+import com.google.ar.core.TrackingState
 import io.github.sceneview.ar.ArSceneView
+import io.github.sceneview.ar.arcore.rotation
 import io.github.sceneview.utils.doOnApplyWindowInsets
 import java.io.BufferedOutputStream
 import java.io.ByteArrayOutputStream
@@ -47,11 +49,12 @@ class MainFragment : Fragment(R.layout.fragment_main), SensorEventListener {
         // Initializing camera
         sceneView = view.findViewById(R.id.sceneView)
         sceneView.onArFrame = {
-            takePhoto()
-
-            isPhoneNotMoving(it.camera)
+            if (it.camera.getTrackingState() == TrackingState.TRACKING) {
+                canTakePicture = isPhoneNotMoving(it.camera)
+                canTakePicture = isPhoneOrientedDown(it.camera)
+                takePhoto()
+            }
         }
-
 
         // Initializing interface
         actionButton = view.findViewById<ExtendedFloatingActionButton>(R.id.actionButton).apply {
@@ -62,6 +65,26 @@ class MainFragment : Fragment(R.layout.fragment_main), SensorEventListener {
             }
             setOnClickListener { setCapturePictureToTrue() }
         }
+    }
+
+    val tiltThreshold = 7
+    fun isPhoneOrientedDown(camera: Camera): Boolean {
+
+        if (abs(abs(camera.pose.rotation[0]) - 90) > tiltThreshold) {
+            /*Log.i(
+                "ROTATION",
+                "Phone is not horizontal straight forward"
+            )*/
+            return false
+        }
+        if (abs(abs(camera.pose.rotation[2]) - 180) > tiltThreshold) {
+            /*Log.i(
+                "ROTATION",
+                "Phone is not horizontal laterally"
+            )*/
+            return false
+        }
+        return true
     }
 
     // Create a buffer of the last 20 frames and check if there is not too much movement
