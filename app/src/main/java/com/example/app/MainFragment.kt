@@ -38,7 +38,6 @@ class MainFragment : Fragment(R.layout.fragment_main), SensorEventListener {
     var canTakePicture: Boolean = false
 
     lateinit var sensorManager: SensorManager
-    lateinit var accelerationSensor: Sensor
     lateinit var gyroscopeSensor: Sensor
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -70,8 +69,8 @@ class MainFragment : Fragment(R.layout.fragment_main), SensorEventListener {
     fun isCameraNotMoving(camera: Camera): Boolean {
         positions.add(camera.pose.translation)
 
-        // Below 5 positions, we cannot make sure there is no movement
-        if (positions.size < 5) {
+        // Waiting to fill the queue to
+        if (positions.size < 20) {
             return false
         }
         // Removing the last position in the queue
@@ -105,10 +104,6 @@ class MainFragment : Fragment(R.layout.fragment_main), SensorEventListener {
 
         var threshold: Float = 0.005f //5mm
         if (maxX - minX > threshold || maxY - minY > threshold || maxZ - minZ > threshold) {
-            Log.i(
-                "POSITION",
-                "Moving too much"
-            )
             return false
         }
         return true
@@ -116,7 +111,6 @@ class MainFragment : Fragment(R.layout.fragment_main), SensorEventListener {
 
     override fun onResume() {
         super.onResume()
-        sensorManager.registerListener(this, accelerationSensor, SensorManager.SENSOR_DELAY_NORMAL)
         sensorManager.registerListener(this, gyroscopeSensor, SensorManager.SENSOR_DELAY_NORMAL)
     }
 
@@ -125,24 +119,9 @@ class MainFragment : Fragment(R.layout.fragment_main), SensorEventListener {
         sensorManager.unregisterListener(this)
     }
 
-    //https://developers.google.com/ar/reference/java/com/google/ar/core/Camera#getDisplayOrientedPose()
-    //https://developers.google.com/ar/reference/java/com/google/ar/core/Camera#getPose()
-    // use that instead of sensors?
     fun InitSensorActivity() {
         sensorManager = requireActivity().getSystemService(SENSOR_SERVICE) as SensorManager
-        accelerationSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
         gyroscopeSensor = sensorManager.getDefaultSensor(TYPE_GYROSCOPE)
-    }
-
-
-    fun isPhoneNotMoving(accelerations: FloatArray): Boolean {
-        for (i in 0..2) {
-            // m/s²
-            if (abs(accelerations[i]) > 0.01) { // test
-                return false
-            }
-        }
-        return true
     }
 
     fun isPhoneOrientedDown(orientations: FloatArray): Boolean {
@@ -156,11 +135,7 @@ class MainFragment : Fragment(R.layout.fragment_main), SensorEventListener {
         }
         return true
     }
-
-    /*
-    * Ask about whether to use cameraX or not.
-    * Ask about resolution of Filament
-    * */
+    
     // No way of finding programmatically the specs of the camera?
     fun computeDepthOfField() {
         var focalLength: Float = 0f //distance between the lens and the focal point
@@ -179,27 +154,22 @@ class MainFragment : Fragment(R.layout.fragment_main), SensorEventListener {
     }
 
     /* Implementing SensorEventListener functions */
-    var accelerometerReading = FloatArray(3)
     var gyroscopeReading = FloatArray(3)
 
     override fun onSensorChanged(event: SensorEvent?) {
         var sensorName = event!!.sensor.name
         if (event == null) {
             //Do nothing
-        } else if (event.sensor.type == Sensor.TYPE_LINEAR_ACCELERATION) {
-            //event values are in m/s²
-            System.arraycopy(event.values, 0, accelerometerReading, 0, accelerometerReading.size)
-            Log.d(
-                sensorName,
-                ": X: " + event.values[0] + "; Y: " + event.values[1] + "; Z: " + event.values[2]
-            )
         } else if (event.sensor.type == Sensor.TYPE_GYROSCOPE) {
             //event values are in rad/s
             System.arraycopy(event.values, 0, gyroscopeReading, 0, gyroscopeReading.size)
+            Log.d(
+                "SENSOR",
+                ": X: " + event.values[0] + "; Y: " + event.values[1] + "; Z: " + event.values[2]
+            )
         }
 
-        canTakePicture =
-            isPhoneNotMoving(accelerometerReading) && isPhoneOrientedDown(gyroscopeReading)
+        canTakePicture = isPhoneOrientedDown(gyroscopeReading)
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
@@ -248,10 +218,7 @@ class MainFragment : Fragment(R.layout.fragment_main), SensorEventListener {
     }
 
     fun takePhoto() {
-        var position = sceneView.camera.position
-        var worldPosition = sceneView.camera.worldPosition
-
-        if (triggerTakePicture == true) {
+        if (triggerTakePicture && canTakePicture) {
             try {
                 val root: File? = activity?.getExternalFilesDir(Environment.DIRECTORY_PICTURES)
                 val filepath: String = root.toString() + File.separator + "test2.jpeg"
@@ -268,7 +235,7 @@ class MainFragment : Fragment(R.layout.fragment_main), SensorEventListener {
             } catch (t: Exception) {
                 Log.e("TAKE PHOTO", "Exception on the OpenGL thread", t);
             }
-            triggerTakePicture = false
         }
+        triggerTakePicture = false
     }
 }
