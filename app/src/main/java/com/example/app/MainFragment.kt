@@ -49,7 +49,7 @@ class MainFragment : Fragment(R.layout.fragment_main), SensorEventListener {
         sceneView.onArFrame = {
             takePhoto()
 
-            isCameraNotMoving(it.camera)
+            isPhoneNotMoving(it.camera)
         }
 
 
@@ -66,7 +66,7 @@ class MainFragment : Fragment(R.layout.fragment_main), SensorEventListener {
 
     // Create a buffer of the last 20 frames and check if there is not too much movement
     val positions: Queue<FloatArray> = LinkedList()
-    fun isCameraNotMoving(camera: Camera): Boolean {
+    fun isPhoneNotMoving(camera: Camera): Boolean {
         positions.add(camera.pose.translation)
 
         // Waiting to fill the queue to
@@ -124,18 +124,18 @@ class MainFragment : Fragment(R.layout.fragment_main), SensorEventListener {
         gyroscopeSensor = sensorManager.getDefaultSensor(TYPE_GYROSCOPE)
     }
 
-    fun isPhoneOrientedDown(orientations: FloatArray): Boolean {
+    fun isPhoneOrientationStable(orientations: FloatArray): Boolean {
         // Conversion from radian to degrees
         for (i in 0..2) {
             orientations[i] = Math.toDegrees(orientations[i].toDouble()).toFloat()
         }
 
-        if (abs(orientations[0]) > 10 || abs(orientations[1]) > 10) {
+        if (abs(orientations[0]) > 2 || abs(orientations[1]) > 2 || abs(orientations[2]) > 2) {
             return false
         }
         return true
     }
-    
+
     // No way of finding programmatically the specs of the camera?
     fun computeDepthOfField() {
         var focalLength: Float = 0f //distance between the lens and the focal point
@@ -163,13 +163,8 @@ class MainFragment : Fragment(R.layout.fragment_main), SensorEventListener {
         } else if (event.sensor.type == Sensor.TYPE_GYROSCOPE) {
             //event values are in rad/s
             System.arraycopy(event.values, 0, gyroscopeReading, 0, gyroscopeReading.size)
-            Log.d(
-                "SENSOR",
-                ": X: " + event.values[0] + "; Y: " + event.values[1] + "; Z: " + event.values[2]
-            )
+            canTakePicture = isPhoneOrientationStable(gyroscopeReading)
         }
-
-        canTakePicture = isPhoneOrientedDown(gyroscopeReading)
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
