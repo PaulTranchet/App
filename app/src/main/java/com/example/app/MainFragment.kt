@@ -18,6 +18,7 @@ import android.view.ViewGroup
 import android.widget.Toast
 import androidx.fragment.app.Fragment
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
+import com.google.ar.core.Camera
 import com.google.ar.core.Frame
 import io.github.sceneview.ar.ArSceneView
 import io.github.sceneview.utils.doOnApplyWindowInsets
@@ -25,6 +26,7 @@ import java.io.BufferedOutputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
+import java.util.*
 import kotlin.math.abs
 
 
@@ -46,9 +48,11 @@ class MainFragment : Fragment(R.layout.fragment_main), SensorEventListener {
         // Initializing camera
         sceneView = view.findViewById(R.id.sceneView)
         sceneView.onArFrame = {
-            takePhoto();
+            takePhoto()
+
+            isCameraNotMoving(it.camera)
         }
-        sceneView.arCameraStream.cameraTexture
+
 
         // Initializing interface
         actionButton = view.findViewById<ExtendedFloatingActionButton>(R.id.actionButton).apply {
@@ -59,6 +63,55 @@ class MainFragment : Fragment(R.layout.fragment_main), SensorEventListener {
             }
             setOnClickListener { setCapturePictureToTrue() }
         }
+    }
+
+    // Create a buffer of the last 20 frames and check if there is not too much movement
+    val positions: Queue<FloatArray> = LinkedList()
+    fun isCameraNotMoving(camera: Camera): Boolean {
+        positions.add(camera.pose.translation)
+
+        // Below 5 positions, we cannot make sure there is no movement
+        if (positions.size < 5) {
+            return false
+        }
+        // Removing the last position in the queue
+        if (positions.size > 20) {
+            positions.poll()
+        }
+
+        // For loop, take the min and max and decide if their difference is above a certain threshold
+        var minX: Float = positions.peek()[0]
+        var maxX: Float = positions.peek()[0]
+        var minY: Float = positions.peek()[1]
+        var maxY: Float = positions.peek()[1]
+        var minZ: Float = positions.peek()[2]
+        var maxZ: Float = positions.peek()[2]
+
+        for (pos in positions) {
+            if (minX > pos[0])
+                minX = pos[0]
+            if (minY > pos[1])
+                minY = pos[1]
+            if (minZ > pos[2])
+                minZ = pos[2]
+
+            if (maxX < pos[0])
+                maxX = pos[0]
+            if (maxY < pos[1])
+                maxY = pos[1]
+            if (maxZ < pos[2])
+                maxZ = pos[2]
+        }
+
+        var threshold: Float = 0.005f //5mm
+        if (maxX - minX > threshold || maxY - minY > threshold || maxZ - minZ > threshold) {
+            Log.i(
+                "POSITION",
+                "Moving too much"
+            )
+            return false
+        }
+        return true
     }
 
     override fun onResume() {
@@ -72,6 +125,9 @@ class MainFragment : Fragment(R.layout.fragment_main), SensorEventListener {
         sensorManager.unregisterListener(this)
     }
 
+    //https://developers.google.com/ar/reference/java/com/google/ar/core/Camera#getDisplayOrientedPose()
+    //https://developers.google.com/ar/reference/java/com/google/ar/core/Camera#getPose()
+    // use that instead of sensors?
     fun InitSensorActivity() {
         sensorManager = requireActivity().getSystemService(SENSOR_SERVICE) as SensorManager
         accelerationSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
@@ -105,17 +161,20 @@ class MainFragment : Fragment(R.layout.fragment_main), SensorEventListener {
     * Ask about whether to use cameraX or not.
     * Ask about resolution of Filament
     * */
-    fun computeDepthOfField()
-    {
+    // No way of finding programmatically the specs of the camera?
+    fun computeDepthOfField() {
         var focalLength: Float = 0f //distance between the lens and the focal point
         var hyperfocalDistance: Float = 0f // first distance at which the infinity is sharp
         var aperture: Float = 0f // f/number, the opening that lets the light enter the camera
         var minimumFocusDistance: Float = 0f // first distance at which the subject is sharp
-        var circleOfConfusion: Float = 0f // size of the circle where light rays converge, but are not focused perfectly on a point
+        var circleOfConfusion: Float =
+            0f // size of the circle where light rays converge, but are not focused perfectly on a point
 
         hyperfocalDistance = (focalLength * focalLength) / (aperture * circleOfConfusion)
-        var firstSharpDistance = (hyperfocalDistance * minimumFocusDistance) / (hyperfocalDistance + (minimumFocusDistance - focalLength))
-        var lastSharpDistance = (hyperfocalDistance * minimumFocusDistance) / (hyperfocalDistance - (minimumFocusDistance - focalLength))
+        var firstSharpDistance =
+            (hyperfocalDistance * minimumFocusDistance) / (hyperfocalDistance + (minimumFocusDistance - focalLength))
+        var lastSharpDistance =
+            (hyperfocalDistance * minimumFocusDistance) / (hyperfocalDistance - (minimumFocusDistance - focalLength))
         var depthOfField = lastSharpDistance - firstSharpDistance
     }
 
@@ -139,7 +198,8 @@ class MainFragment : Fragment(R.layout.fragment_main), SensorEventListener {
             System.arraycopy(event.values, 0, gyroscopeReading, 0, gyroscopeReading.size)
         }
 
-        canTakePicture = isPhoneNotMoving(accelerometerReading) && isPhoneOrientedDown(gyroscopeReading)
+        canTakePicture =
+            isPhoneNotMoving(accelerometerReading) && isPhoneOrientedDown(gyroscopeReading)
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
@@ -188,6 +248,9 @@ class MainFragment : Fragment(R.layout.fragment_main), SensorEventListener {
     }
 
     fun takePhoto() {
+        var position = sceneView.camera.position
+        var worldPosition = sceneView.camera.worldPosition
+
         if (triggerTakePicture == true) {
             try {
                 val root: File? = activity?.getExternalFilesDir(Environment.DIRECTORY_PICTURES)
