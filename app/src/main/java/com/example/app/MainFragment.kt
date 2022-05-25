@@ -23,6 +23,7 @@ import com.google.ar.core.Frame
 import com.google.ar.core.TrackingState
 import io.github.sceneview.ar.ArSceneView
 import io.github.sceneview.ar.arcore.rotation
+import io.github.sceneview.ar.camera.ArCameraStream
 import io.github.sceneview.utils.doOnApplyWindowInsets
 import java.io.BufferedOutputStream
 import java.io.ByteArrayOutputStream
@@ -49,13 +50,15 @@ class MainFragment : Fragment(R.layout.fragment_main), SensorEventListener {
         // Initializing camera
         sceneView = view.findViewById(R.id.sceneView)
         sceneView.onArFrame = {
+            Log.i("TEXTURE", sceneView.arCameraStream.cameraTexture!!.format.name) //RGB8
+            sceneView.arCameraStream.cameraTexture
+
             if (it.camera.getTrackingState() == TrackingState.TRACKING) {
                 canTakePicture = isPhoneNotMoving(it.camera)
                 canTakePicture = isPhoneOrientedDown(it.camera)
                 takePhoto()
             }
         }
-
         // Initializing interface
         actionButton = view.findViewById<ExtendedFloatingActionButton>(R.id.actionButton).apply {
             val bottomMargin = (layoutParams as ViewGroup.MarginLayoutParams).bottomMargin
@@ -67,21 +70,21 @@ class MainFragment : Fragment(R.layout.fragment_main), SensorEventListener {
         }
     }
 
-    val tiltThreshold = 7
+    val tiltThreshold = 15
     fun isPhoneOrientedDown(camera: Camera): Boolean {
 
         if (abs(abs(camera.pose.rotation[0]) - 90) > tiltThreshold) {
-            /*Log.i(
+            Log.i(
                 "ROTATION",
                 "Phone is not horizontal straight forward"
-            )*/
+            )
             return false
         }
         if (abs(abs(camera.pose.rotation[2]) - 180) > tiltThreshold) {
-            /*Log.i(
+            Log.i(
                 "ROTATION",
                 "Phone is not horizontal laterally"
-            )*/
+            )
             return false
         }
         return true
@@ -89,6 +92,7 @@ class MainFragment : Fragment(R.layout.fragment_main), SensorEventListener {
 
     // Create a buffer of the last 20 frames and check if there is not too much movement
     val positions: Queue<FloatArray> = LinkedList()
+    val movementThreshold: Float = 0.005F
     fun isPhoneNotMoving(camera: Camera): Boolean {
         positions.add(camera.pose.translation)
 
@@ -125,7 +129,7 @@ class MainFragment : Fragment(R.layout.fragment_main), SensorEventListener {
                 maxZ = pos[2]
         }
 
-        var threshold: Float = 0.005f //5mm
+        var threshold: Float = movementThreshold
         if (maxX - minX > threshold || maxY - minY > threshold || maxZ - minZ > threshold) {
             return false
         }
@@ -239,8 +243,8 @@ class MainFragment : Fragment(R.layout.fragment_main), SensorEventListener {
         if (triggerTakePicture && canTakePicture) {
             try {
                 val root: File? = activity?.getExternalFilesDir(Environment.DIRECTORY_PICTURES)
-                val filepath: String = root.toString() + File.separator + "test2.jpeg"
-                Log.e("TAKE PHOTO", filepath)
+                val filepath: String = root.toString() + File.separator + "test3.jpeg"
+                Log.i("TAKE PHOTO", filepath)
 
                 val frame: Frame = sceneView.arSession!!.update()
                 var image: Image =
