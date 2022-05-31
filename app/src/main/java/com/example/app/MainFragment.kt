@@ -23,7 +23,6 @@ import com.google.ar.core.Frame
 import com.google.ar.core.TrackingState
 import io.github.sceneview.ar.ArSceneView
 import io.github.sceneview.ar.arcore.rotation
-import io.github.sceneview.ar.camera.ArCameraStream
 import io.github.sceneview.utils.doOnApplyWindowInsets
 import java.io.BufferedOutputStream
 import java.io.ByteArrayOutputStream
@@ -37,7 +36,7 @@ class MainFragment : Fragment(R.layout.fragment_main), SensorEventListener {
     lateinit var sceneView: ArSceneView
     lateinit var actionButton: ExtendedFloatingActionButton
 
-    var triggerTakePicture: Boolean = false
+    var isTakingPicture: Boolean = false
     var canTakePicture: Boolean = false
 
     lateinit var sensorManager: SensorManager
@@ -54,8 +53,7 @@ class MainFragment : Fragment(R.layout.fragment_main), SensorEventListener {
             sceneView.arCameraStream.cameraTexture
 
             if (it.camera.getTrackingState() == TrackingState.TRACKING) {
-                canTakePicture = isPhoneNotMoving(it.camera)
-                canTakePicture = isPhoneOrientedDown(it.camera)
+                canTakePicture = isPhoneNotMoving(it.camera) && isPhoneOrientedDown(it.camera) && isSpotAlreadyCaptured(it.camera)
                 takePhoto()
             }
         }
@@ -91,8 +89,9 @@ class MainFragment : Fragment(R.layout.fragment_main), SensorEventListener {
     }
 
     // Create a buffer of the last 20 frames and check if there is not too much movement
+    val capturedPositions: Queue<FloatArray> = LinkedList()
     val positions: Queue<FloatArray> = LinkedList()
-    val movementThreshold: Float = 0.005F
+    val movementThreshold: Float = 0.005F //5mm
     fun isPhoneNotMoving(camera: Camera): Boolean {
         positions.add(camera.pose.translation)
 
@@ -132,6 +131,21 @@ class MainFragment : Fragment(R.layout.fragment_main), SensorEventListener {
         var threshold: Float = movementThreshold
         if (maxX - minX > threshold || maxY - minY > threshold || maxZ - minZ > threshold) {
             return false
+        }
+
+        capturedPositions.add(camera.pose.translation)
+        return true
+    }
+
+    val intervalDistance = 0.2F //20cm
+    fun isSpotAlreadyCaptured(camera: Camera): Boolean {
+        var currentPos = camera.pose.translation
+        for (pos in capturedPositions)
+        {
+            if (abs(pos[0] - currentPos[0]) < intervalDistance && abs(pos[1] - currentPos[1]) < intervalDistance)
+            {
+                return false
+            }
         }
         return true
     }
@@ -236,11 +250,11 @@ class MainFragment : Fragment(R.layout.fragment_main), SensorEventListener {
     }
 
     fun setCapturePictureToTrue() {
-        this.triggerTakePicture = true;
+        this.isTakingPicture = true;
     }
 
     fun takePhoto() {
-        if (triggerTakePicture && canTakePicture) {
+        if (isTakingPicture && canTakePicture) {
             try {
                 val root: File? = activity?.getExternalFilesDir(Environment.DIRECTORY_PICTURES)
                 val filepath: String = root.toString() + File.separator + "test3.jpeg"
@@ -258,6 +272,11 @@ class MainFragment : Fragment(R.layout.fragment_main), SensorEventListener {
                 Log.e("TAKE PHOTO", "Exception on the OpenGL thread", t);
             }
         }
-        triggerTakePicture = false
+        isTakingPicture = false
+
+        /*
+        isTakingPicture != isTakingPicture
+
+         */
     }
 }

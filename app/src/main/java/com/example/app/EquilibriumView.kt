@@ -2,12 +2,14 @@ package com.example.app
 
 import android.content.Context
 import android.graphics.*
+import android.os.Bundle
 import android.util.AttributeSet
 import android.view.View
 
 class EquilibriumView(context: Context, attributes: AttributeSet) : View(context, attributes) {
     var xTilt = 0F
     var yTilt = 0F
+
 
     private var paint = Paint().apply {
         style = Paint.Style.FILL
